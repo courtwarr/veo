@@ -8,15 +8,22 @@ library(leaflet)
 library(ggplot2)
 library(viridis)
 library(rhandsontable)
+library(RColorBrewer)
 
-customers <- read.csv("/home/bort/veo/Data/Customers.csv")
-rides <- read.csv("/home/bort/veo/Data/Rides.csv")
-vehicles <- read.csv("/home/bort/veo/Data/Vehicles.csv")
-dict <- read.csv("/home/bort/veo/Data/Data Dictionary.csv")
-tech_actions <- read.csv("/home/bort/veo/Data/Technician Actions.csv") %>%
-    mutate(time_elapsed=as.numeric(difftime(as.POSIXct(technician_action_completed_at_local_time),as.POSIXct(technician_action_created_at_local_time),units="mins")),
+customers <- read.csv("www/Customers.csv")
+rides <- read.csv("www/Rides.csv")
+vehicles <- read.csv("www/Vehicles.csv")
+dict <- read.csv("www/Data Dictionary.csv")
+tech_actions <- read.csv("www/Technician Actions.csv") %>%
+    mutate(#time_elapsed=as.numeric(difftime(as.POSIXct(technician_action_completed_at_local_time),as.POSIXct(technician_action_created_at_local_time),units="mins")),
            completed_date=as.Date(as.POSIXct(technician_action_completed_at_local_time)))
-wo_orders <- read.csv("/home/bort/veo/Data/Work Orders.csv")
+wo_orders <- read.csv("www/Work Orders.csv")
+
+actionVars <- c(
+    'Mean Score','Total Score','Total Questionable Rebalances',
+    'Mean Daily Battery Swaps','Mean Daily Maintenances','Mean Daily Rebalances',
+    'Total Battery Swaps','Total Maintenances','Total Rebalances'
+)
 
 rounder <- 0.002
 
@@ -26,8 +33,8 @@ ui <- dashboardPage(
         sidebarMenu(
             id="tabs",
             menuItem("Map",tabName="map",icon=icon("map")),
-            menuItem("Tech Stats",tabName="score",icon=icon("list-ol")),
-            menuItem("Ride Stats",tabName="stats",icon=icon("chart-simple")),
+            menuItem("Tech Stats",tabName="techStats",icon=icon("list-ol")),
+            menuItem("Ride Stats",tabName="rideStats",icon=icon("chart-simple")),
             hr(),
             conditionalPanel(
                 condition="input.tabs=='map'",
@@ -36,8 +43,12 @@ ui <- dashboardPage(
                 checkboxInput("log",label="Log Scale",value=FALSE)
             ),
             conditionalPanel(
-                condition="input.tabs=='stats'",
-                selectInput("timeVar",label="Variable",choices=c("hour","day of week","day of year","ride distance","ride charge"))
+                condition="input.tabs=='rideStats'",
+                selectInput("rideVar",label="Variable",choices=c("hour","day of week","day of year","ride distance","ride charge")),
+            ),
+            conditionalPanel(
+                condition="input.tabs=='techStats'",
+                checkboxInput("removeSmall",label="Exclude Low Contributors",value=TRUE)
             ),
             #sliderInput("pixelOpacity",label="Pixel Opacity",min=1,max=6,step=1,value=5),
             sliderInput("pixelSize",label="Pixel Size (m°)",min=1,max=10,step=1,value=2)
@@ -54,7 +65,7 @@ ui <- dashboardPage(
                 leafletOutput("ridesMap") %>% withSpinner()
             ),
             tabItem(
-                tabName="score",
+                tabName="techStats",
                 fluidRow(
                     box(
                         width=9,
@@ -73,14 +84,14 @@ ui <- dashboardPage(
                 )
             ),
             tabItem(
-                tabName="stats",
+                tabName="rideStats",
                 fluidRow(
                     box(
                         title="Ride Stats",
                         solidHeader=TRUE,
                         status="primary",
                         width=6,
-                        plotOutput("timePlot") %>% withSpinner()
+                        plotOutput("ridePlot") %>% withSpinner()
                     ),
                     box(
                         title="Revenue vs Ride Length",
@@ -105,18 +116,40 @@ server <- function(input, output, session) {
     })
     
     rides2 <- reactive({
+        # rides2 <- rides %>%
+        #     filter(ride_distance_in_miles<=100) %>%
+        #     filter(between(hour(ride_started_at_local_time),min(input$hours),max(input$hours))) %>%
+        #     mutate(start_lon=round(ride_start_longitude/rd())*rd(),
+        #            start_lat=round(ride_start_latitude/rd())*rd(),
+        #            date=as.Date(ride_started_at_local_time)) %>%
+        #     group_by(start_lon,start_lat) %>%
+        #     summarise(`Total Ride Count`=as.numeric(n()),
+        #               `Total Ride Distance`=sum(ride_distance_in_miles),
+        #               `Total Revenue`=sum(ride_charge_in_dollars),
+        #               `Mean Daily Revenue`=`Total Revenue`/(as.numeric(difftime(max(as.Date(as.POSIXct(ride_started_at_local_time))),min(as.Date(as.POSIXct(ride_started_at_local_time))),units="days"))+1),
+        #               `Mean Ride Distance`=mean(ride_distance_in_miles)) %>%
+        #     filter(`Total Ride Count`>=3) %>%
+        #     as.data.table() %>%
+        #     melt(id.vars=c('start_lat','start_lon')) %>%
+        #     mutate(variable=as.character(variable))
+        
         rides2 <- rides %>%
             filter(ride_distance_in_miles<=100) %>%
             filter(between(hour(ride_started_at_local_time),min(input$hours),max(input$hours))) %>%
             mutate(start_lon=round(ride_start_longitude/rd())*rd(),
-                   start_lat=round(ride_start_latitude/rd())*rd()) %>%
-            group_by(start_lon,start_lat) %>%
+                   start_lat=round(ride_start_latitude/rd())*rd(),
+                   date=as.Date(ride_started_at_local_time)) %>%
+            group_by(start_lon,start_lat,date) %>%
             summarise(`Total Ride Count`=as.numeric(n()),
                       `Total Ride Distance`=sum(ride_distance_in_miles),
-                      `Total Revenue`=sum(ride_charge_in_dollars),
-                      `Mean Daily Revenue`=`Total Revenue`/(as.numeric(difftime(max(as.Date(as.POSIXct(ride_started_at_local_time))),min(as.Date(as.POSIXct(ride_started_at_local_time))),units="days"))+1),
-                      `Mean Ride Distance`=mean(ride_distance_in_miles)) %>%
-            filter(`Total Ride Count`>=3) %>%
+                      `Total Revenue`=sum(ride_charge_in_dollars)) %>%
+            group_by(start_lon,start_lat) %>%
+            summarise(`Mean Daily Revenue`=mean(`Total Revenue`),
+                      `Mean Ride Distance`=mean(`Total Ride Distance`),
+                      `Total Ride Count`=sum(`Total Ride Count`),
+                      `Total Ride Distance`=sum(`Total Ride Distance`),
+                      `Total Revenue`=sum(`Total Revenue`)) %>%
+            #filter(`Total Ride Count`>=3) %>%
             as.data.table() %>%
             melt(id.vars=c('start_lat','start_lon')) %>%
             mutate(variable=as.character(variable))
@@ -144,12 +177,19 @@ server <- function(input, output, session) {
             arrange(desc(value)) %>%
             mutate(pixelID=row_number(),
                    variable=NULL)
+        # rides %>%
+        #     mutate(start_lon=round(ride_start_longitude/rd())*rd(),
+        #            start_lat=round(ride_start_latitude/rd())*rd()) %>%
+        #     rename("lat"=start_lat,"lon"=start_lon) %>%
+        #     select(c("lat","lon")) %>%
+        #     unique() %>%
+        #     mutate(pixelID=row_number())
     })
     
     techScores <- reactive({
         tech_actions %>%
             filter(technician_action_type=="Rebalance") %>%
-            mutate(completion_date=as.Date(as.POSIXct(technician_action_completed_at_local_time)), # not used, for time series
+            mutate(#completion_date=as.Date(as.POSIXct(technician_action_completed_at_local_time)), # not used, for time series
                    start_lon=round(technician_pickup_longitude/rd())*rd(),
                    start_lat=round(technician_pickup_latitude/rd())*rd(),
                    stop_lon=round(technician_dropoff_longitude/rd())*rd(),
@@ -159,6 +199,7 @@ server <- function(input, output, session) {
             left_join(pixels(),by=c("stop_lat"="lat","stop_lon"="lon")) %>%
             mutate(valueDiff=value.y-value.x) %>%
             group_by(technician_id) %>%
+            #filter(n()>=3) %>%
             summarise(`Mean Score`=mean(valueDiff,na.rm=TRUE),
                       `Total Score`=sum(valueDiff,na.rm=TRUE),
                       `Total Questionable Rebalances`=sum(valueDiff<=0,na.rm=TRUE)) %>%
@@ -170,21 +211,33 @@ server <- function(input, output, session) {
             group_by(technician_action_type,technician_id,completed_date) %>%
             summarise(n=n()) %>%
             group_by(technician_action_type,technician_id) %>%
-            summarise(nPerDay=mean(n),
-                      n=sum(n)) %>%
-            filter(n>=10) %>%
-            arrange(technician_action_type,desc(nPerDay)) %>%
-            as.data.frame() %>%
-            mutate(variable=paste0("Mean ",as.character(technician_action_type),"s per Day"),
-                   value=nPerDay,
-                   nPerDay=NULL,n=NULL,technician_action_type=NULL)
+            summarise(`Mean Daily`=mean(n),
+                      Total=sum(n),
+                      daysWorked=n()) %>%
+            #filter(daysWorked>=3) %>%
+            mutate(daysWorked=NULL) %>%
+            as.data.table() %>%
+            melt(id.vars=c("technician_id","technician_action_type")) %>%
+            mutate(variable=paste0(variable," ",technician_action_type,"s"),
+                   technician_action_type=NULL)
         
         scores <- as.data.table(techScores()) %>%
             melt(id.vars=c("technician_id")) %>%
             mutate(variable=as.character(variable))
         
-        bind_rows(actions,scores) %>%
-            mutate(technician_id=as.character(technician_id))
+        data <- bind_rows(scores,actions) %>%
+            mutate(technician_id=as.character(technician_id),
+                   variable=factor(variable,levels=actionVars)) %>%
+            arrange(technician_id,variable)
+        
+        if(input$removeSmall) {
+            data <- data %>%
+                group_by(technician_id) %>%
+                filter(min(value[variable=="Total Rebalances"])>=15) %>%
+                ungroup()
+        }
+        
+        return(data)
     })
 
     output$ridesMap <- renderLeaflet({
@@ -223,17 +276,17 @@ server <- function(input, output, session) {
     output$techPlot <- renderPlot({
          techPlotData() %>%
             ggplot(aes(x=technician_id,y=value,fill=technician_id)) +
-            geom_bar(stat="identity",color="black") +
+            geom_bar(stat="identity",color="black",width=3/4) +
             facet_wrap(vars(variable),scales="free_y") +
             guides(fill=FALSE) +
             labs(y="Value",
                  x="Technician ID") +
             theme(
                 axis.title = element_text(size = 16),  # Axis titles
-                axis.text.y = element_text(size = 14),
-                axis.text.x = element_text(size = 14, angle=90),
-                plot.title = element_text(size = 20, face = "bold"),
-                strip.text = element_text(size = 16, face = "bold")
+                axis.text.y = element_text(size = 12),
+                axis.text.x = element_text(size = 12, angle=90),
+                plot.title = element_text(size = 16, face = "bold"),
+                strip.text = element_text(size = 14, face = "bold")
             )
     })
     
@@ -246,8 +299,8 @@ server <- function(input, output, session) {
             geom_smooth(method="lm")
     })
     
-    output$timePlot <- renderPlot({
-        rides %>%
+    output$ridePlot <- renderPlot({
+        plot <- rides %>%
             left_join(vehicles,by="vehicle_id") %>%
             filter(ride_distance_in_miles<=100) %>%
             rename('ride distance'=ride_distance_in_miles,
@@ -255,20 +308,26 @@ server <- function(input, output, session) {
             mutate(hour=hour(as.POSIXct(ride_started_at_local_time)),
                    `day of week`=wday(as.POSIXct(ride_started_at_local_time)),
                    `day of year`=as.Date(as.POSIXct(ride_started_at_local_time))) %>%
-            ggplot(aes_string(x=paste0("`",input$timeVar,"`"))) +
+            ggplot(aes_string(x=paste0("`",input$rideVar,"`"))) +
             geom_histogram(aes(fill=vehicle_type),color="black",binwidth=1)
+        
+        # if(grepl("ride",input$rideVar)) {
+        #     plot <- plot + scale_x_log10()
+        # }
+        
+        return(plot)
     })
     
     output$techTable <- renderRHandsontable({
         techPlotData() %>%
+            mutate(variable=gsub(" ","<br>",variable)) %>%
             as.data.table() %>%
             dcast(technician_id~variable,value.var="value") %>%
-            rhandsontable(rowHeaders=FALSE) %>% 
+            rhandsontable(rowHeaders=FALSE,escape=FALSE) %>% 
             hot_cols(columnSorting=TRUE)
     })
     
     output$debug <- renderPrint({
-        #str(rides2())
     })
     
 }
