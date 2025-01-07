@@ -1,0 +1,36 @@
+File,Column Name,Description
+Customers,customer_id,ID associated with Veo customer
+Customers,app_version,Veo customer app version used by customer
+Customers,phone_model,Phone model used by customer
+Customers,customer_signed_up_at_local_time,Timestamp of customer signup for Veo account
+Customers,num_days_between_signup_and_first_ride,Number of days that passed between customer signup and customer's first Veo ride
+Customers,has_completed_in_app_safety_quiz,True if customer has ever completed a safety quiz in Veo app
+Rides,ride_id,ID associated with ride
+Rides,ride_charge_in_dollars,"Charge to customer balance associated with ride, in dollars"
+Rides,ride_distance_in_miles,"Distance covered by ride, in miles"
+Rides,ride_start_latitude,Latitude of vehicle at start of ride
+Rides,ride_start_longitude,Longitude of vehicle at start of ride
+Rides,ride_stop_latitude,Latitude of vehicle at end of ride
+Rides,ride_stop_longitude,Longitude of vehicle at start of ride
+Rides,ride_started_at_local_time,Timestamp of start of ride
+Rides,ride_ended_at_local_time,Timestamp of end of ride
+Rides,vehicle_id,ID associated with vehicle used for ride
+Rides,customer_id,ID of customer who took ride
+Technician Actions,technician_action_id,ID associated with technician action
+Technician Actions,vehicle_id,ID of vehicle on which action was performed
+Technician Actions,technician_action_type,"Type of technician action - one of ""Battery Swap"", ""Rebalance"", or ""Maintenance"""
+Technician Actions,technician_id,ID of technician who performed the action
+Technician Actions,technician_action_created_at_local_time,Timestamp of beginning of technician action
+Technician Actions,technician_action_completed_at_local_time,Timestamp of end of technician action
+Technician Actions,technician_pickup_latitude,Latitude of technician action beginning
+Technician Actions,technician_pickup_longitude,Longitude of technician action beginning
+Technician Actions,technician_dropoff_latitude,"Latitude of technician action end, if vehicle was moved"
+Technician Actions,technician_dropoff_longitude,"Longitude of technician action end, if vehicle was moved"
+Technician Actions,pct_vehicle_battery_remaining_at_pickup,Battery level of vehicle prior to technician action
+Vehicles,vehicle_id,ID associated with vehicle
+Vehicles,vehicle_type,"Type of vehicle - one of ""sitdown scooter"" or ""standup scooter"""
+Vehicles,firmware_version,Hashed value indicating version of firmware installed on vehicle
+Work Orders,work_order_id,ID associated with work order - a maintenance action performed in the warehouse on a vehicle
+Work Orders,vehicle_id,ID of vehicle repaired in work order
+Work Orders,work_order_created_at_local_time,Timestamp associated with the creation of the work order
+Work Orders,sum_minutes_spent_on_work_order,Total number of minutes spent by mechanic on work order
