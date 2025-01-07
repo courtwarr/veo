@@ -179,7 +179,7 @@ server <- function(input, output, session) {
                    value=nPerDay,
                    nPerDay=NULL,n=NULL,technician_action_type=NULL)
         
-        scores <- techScores() %>%
+        scores <- as.data.table(techScores()) %>%
             melt(id.vars=c("technician_id")) %>%
             mutate(variable=as.character(variable))
         
@@ -239,14 +239,16 @@ server <- function(input, output, session) {
     
     output$pricePlot <- renderPlot({
         rides %>%
+            left_join(vehicles,by="vehicle_id") %>%
             filter(ride_distance_in_miles<=100) %>%
-            ggplot(aes(x=ride_distance_in_miles,y=ride_charge_in_dollars)) +
+            ggplot(aes(x=ride_distance_in_miles,y=ride_charge_in_dollars,color=vehicle_type)) +
             geom_point(alpha=1/4,size=1) +
             geom_smooth(method="lm")
     })
     
     output$timePlot <- renderPlot({
         rides %>%
+            left_join(vehicles,by="vehicle_id") %>%
             filter(ride_distance_in_miles<=100) %>%
             rename('ride distance'=ride_distance_in_miles,
                    'ride charge'=ride_charge_in_dollars) %>%
@@ -254,11 +256,12 @@ server <- function(input, output, session) {
                    `day of week`=wday(as.POSIXct(ride_started_at_local_time)),
                    `day of year`=as.Date(as.POSIXct(ride_started_at_local_time))) %>%
             ggplot(aes_string(x=paste0("`",input$timeVar,"`"))) +
-            geom_histogram(fill="purple",color="black",binwidth=1)
+            geom_histogram(aes(fill=vehicle_type),color="black",binwidth=1)
     })
     
     output$techTable <- renderRHandsontable({
         techPlotData() %>%
+            as.data.table() %>%
             dcast(technician_id~variable,value.var="value") %>%
             rhandsontable(rowHeaders=FALSE) %>% 
             hot_cols(columnSorting=TRUE)
