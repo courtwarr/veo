@@ -141,11 +141,12 @@ server <- function(input, output, session) {
                    date=as.Date(ride_started_at_local_time)) %>%
             group_by(start_lon,start_lat,date) %>%
             summarise(`Total Ride Count`=as.numeric(n()),
+                      `Mean Ride Distance`=mean(ride_distance_in_miles),
                       `Total Ride Distance`=sum(ride_distance_in_miles),
                       `Total Revenue`=sum(ride_charge_in_dollars)) %>%
             group_by(start_lon,start_lat) %>%
             summarise(`Mean Daily Revenue`=mean(`Total Revenue`),
-                      `Mean Ride Distance`=mean(`Total Ride Distance`),
+                      `Mean Ride Distance`=mean(`Mean Ride Distance`),
                       `Total Ride Count`=sum(`Total Ride Count`),
                       `Total Ride Distance`=sum(`Total Ride Distance`),
                       `Total Revenue`=sum(`Total Revenue`)) %>%
@@ -258,6 +259,7 @@ server <- function(input, output, session) {
             leaflet() %>%
             addScaleBar() %>%
             setView(lng=mean(rides$ride_start_longitude),lat=mean(rides$ride_start_latitude),zoom=14) %>%
+            #leafletOptions(zoomSnap = 0.5) %>%
             addProviderTiles('Esri.WorldImagery') %>%
             addProviderTiles('CartoDB.PositronOnlyLabels') %>%
             addRectangles(
